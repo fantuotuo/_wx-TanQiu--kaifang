@@ -20,7 +20,30 @@ cc.Class({
         userInfo: {
             // nickname,avatarUrl,score,rank,
             default: {},
-        }
+        },
+
+
+
+        page: {
+            get() { 
+                return this._page;
+            },
+            set(v) { 
+                var total = this.myFriendsData.length;
+                var max = Math.max(0, Math.ceil(total / this.pageSize) - 1),
+                    min = 0;
+                v = Math.max(min, v);
+                v = Math.min(max, v);
+
+                this._page = v;
+                // 
+                this.freshRank(this.key);
+            }
+        },
+        pageSize: 100,
+        key: cc.String,
+        
+        
     },
 
 
@@ -49,6 +72,12 @@ cc.Class({
             });
         }
     },
+
+
+
+
+
+
     // 根据我的信息获取我的排名
     getMyRank(key) {   
         this.itemMy.active = false;
@@ -120,6 +149,8 @@ cc.Class({
                     this.sortArray(res.data, key);
                     this.myFriendsData = res.data;
                     this.freshRank(key);
+                    this.key = key;
+                    this.page = 0;  // 自动freshRank
                     this.getMyRank(key);
                 },
                 fail: res => {
@@ -128,14 +159,8 @@ cc.Class({
             })
         }
     },
-    sortArray(data, key) {
-        data.sort((a, b) => {
-            var scoreA = this.getScore(a.KVDataList, key),
-                scoreB = this.getScore(b.KVDataList, key);
-            // 从大到小
-            return parseInt(scoreB) - parseInt(scoreA);
-        });
-    },
+
+
     // 刷新排行榜显示
     freshRank(key) {
         this.items.forEach(item => {
@@ -143,7 +168,11 @@ cc.Class({
         });
         this.items = [];
 
-        for (var i = 0; i < this.myFriendsData.length; i++){
+        var page = this.page,
+            pageSize = this.pageSize;
+        for (var i = page * pageSize; i < pageSize; i++){
+            if (i >= this.myFriendsData.length) break;
+
             var item = cc.instantiate(this.prefabItem);
             item.parent = this.layoutContainer;
             this.items.push(item);
@@ -156,8 +185,75 @@ cc.Class({
                 this.getScore(obj.KVDataList, key),
                 addonMap[key],
                 this.getChenghao(key,this.getScore(obj.KVDataList, key))
-            );
+            )
         }
+        
+        // for (var i = 0; i < this.myFriendsData.length; i++){
+        //     if (i >= this.myFriendsData.length) break;
+
+        //     var item = cc.instantiate(this.prefabItem);
+        //     item.parent = this.layoutContainer;
+        //     this.items.push(item);
+
+        //     var obj = this.myFriendsData[i];
+        //     item.getComponent("item").init(
+        //         i + 1,
+        //         obj.avatarUrl,
+        //         obj.nickname,
+        //         this.getScore(obj.KVDataList, key),
+        //         addonMap[key],
+        //         this.getChenghao(key,this.getScore(obj.KVDataList, key))
+        //     );
+        // }
+    },
+    
+
+
+    // LIFE-CYCLE CALLBACKS:
+
+    // 如果设置开放域窗口active为false，则无法触发这个onload事件
+    onLoad() {
+        console.log("sub load")
+        // this.myFriendsData = [
+        //     // {nickname:"nickname",avatarUrl:"https://wx.qlogo.cn/mmopen/vi_32/tLZqAA1PzOXUykWIB1kicmRVLoqJ7aAFWFCibmnZryISialI1HPrKZXgCy9gq5kfyNhhqA5drm7VNzViar6y76NibhQ/132",KVDataList:[{key: "maxScore", value: "999"}]}
+        // ];
+        // this.freshRank();
+        // 获取用户信息
+        this.getUserInfo();
+        // this.getFriendsInfoArray();
+        this.page = 0;      // 自动freshRank
+
+        
+        if (this.isWechat()) {
+            wx.onMessage(data => {
+                console.log("接收主域发来的消息数据：", data);
+                switch (data.messageType) {
+                    case 3:
+                        // 提交分数到微信云服务器
+                        console.log("更新用户的最大分数，对当前用户的微信托管数据，进行写数据操作。");
+                        this.refreshUserInfo(data.guan, "guan");
+                        break;
+                    case 1:
+                        // 获取用户某一个key的排行榜信息
+                        console.log(`获取用户某一个key[${data.key}]的排行榜信息`);
+                        this.getFriendsInfoArray(data.key);
+                    default:
+                        break;
+                }
+            });
+        }
+    },
+    
+
+
+    // #region 辅助工具
+    sortArray(data, key) {
+        data.sort((a, b) => {
+            var scoreA = this.getScore(a.KVDataList, key),
+                scoreB = this.getScore(b.KVDataList, key);
+            // 从大到小
+            return parseInt(scoreB) - parseInt(scoreA);
+        });
     },
     getScore(KVDataList, key) {
         for (var i = 0; i < KVDataList.length; i++){
@@ -198,45 +294,11 @@ cc.Class({
         var index = Math.floor((score - 1) / guans);
         return arr[index];
     },
-
-
-    // LIFE-CYCLE CALLBACKS:
-
-    // 如果设置开放域窗口active为false，则无法触发这个onload事件
-    onLoad() {
-        console.log("sub load")
-        // this.myFriendsData = [
-        //     // {nickname:"nickname",avatarUrl:"https://wx.qlogo.cn/mmopen/vi_32/tLZqAA1PzOXUykWIB1kicmRVLoqJ7aAFWFCibmnZryISialI1HPrKZXgCy9gq5kfyNhhqA5drm7VNzViar6y76NibhQ/132",KVDataList:[{key: "maxScore", value: "999"}]}
-        // ];
-        // this.freshRank();
-        // 获取用户信息
-        this.getUserInfo();
-        // this.getFriendsInfoArray();
-
-        
-        if (this.isWechat()) {
-            wx.onMessage(data => {
-                console.log("接收主域发来的消息数据：", data);
-                switch (data.messageType) {
-                    case 3:
-                        // 提交分数到微信云服务器
-                        console.log("更新用户的最大分数，对当前用户的微信托管数据，进行写数据操作。");
-                        this.refreshUserInfo(data.guan, "guan");
-                        break;
-                    case 1:
-                        // 获取用户某一个key的排行榜信息
-                        console.log(`获取用户某一个key[${data.key}]的排行榜信息`);
-                        this.getFriendsInfoArray(data.key);
-                    default:
-                        break;
-                }
-            });
-        }
+    onTouchPre() { 
+        this.page--;
     },
-
-    start () {
-
-    },
-
-    // update (dt) {},
+    onTouchNext() { 
+        this.page++;
+    }
+    // #endregion
 });
