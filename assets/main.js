@@ -240,4 +240,3 @@ cc.Class({
 
     // update (dt) {},
 });
-var a = 1;
